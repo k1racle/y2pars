@@ -4,9 +4,13 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime
 from typing import List, Dict
 from playwright.async_api import async_playwright, BrowserContext
+
+# Создаем директорию для логов если не существует
+os.makedirs('logs', exist_ok=True)
 
 try:
     from .yandex_parser import YandexMapsParser
