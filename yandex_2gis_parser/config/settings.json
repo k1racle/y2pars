@@ -1,0 +1,45 @@
+{
+  "cities": [
+    {
+      "name": "Москва",
+      "priority": 1,
+      "enabled": true,
+      "search_queries": ["рестораны", "кафе", "кофейни"]
+    },
+    {
+      "name": "Санкт-Петербург",
+      "priority": 2,
+      "enabled": true,
+      "search_queries": ["рестораны", "кафе"]
+    }
+  ],
+  "sources": {
+    "yandex_maps": {
+      "enabled": true,
+      "priority": 1,
+      "fields": ["name", "address", "rating", "reviews_count", "phone", "website", "category"]
+    },
+    "gis_2": {
+      "enabled": true,
+      "priority": 2,
+      "fields": ["name", "address", "rating", "reviews_count", "phone", "website", "category", "hours"]
+    }
+  },
+  "parsing_settings": {
+    "max_objects_per_query": 50,
+    "delay_between_actions_min": 2,
+    "delay_between_actions_max": 5,
+    "scroll_pause_min": 1,
+    "scroll_pause_max": 3,
+    "mouse_movement_enabled": true,
+    "random_scroll_enabled": true,
+    "headless_mode": false,
+    "proxy_enabled": false,
+    "proxy_list": []
+  },
+  "output": {
+    "format": "xlsx",
+    "filename_pattern": "{city}_{source}_{date}.xlsx",
+    "save_path": "./output"
+  }
+}
