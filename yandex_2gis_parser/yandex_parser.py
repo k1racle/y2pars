@@ -22,71 +22,20 @@ class YandexMapsParser:
         self.base_url = "https://yandex.ru/maps"
         
     async def search(self, page: Page, query: str, city: str):
-        """Выполнение поиска по запросу и городу"""
-        # Переходим сразу на карту с городом
-        self.base_url = f"https://yandex.ru/maps/{self.get_city_slug(city)}"
-        await page.goto(self.base_url, wait_until='domcontentloaded', timeout=60000)
+        """Выполнение поиска по запросу и городу через прямой URL"""
+        city_slug = self.get_city_slug(city)
+        query_slug = query.lower().replace(' ', '-')
+        
+        # Формируем прямой URL с результатами поиска
+        search_url = f"https://yandex.ru/maps/{city_slug}/search/{query_slug}"
+        
+        print(f"Переходим по URL: {search_url}")
+        await page.goto(search_url, wait_until='domcontentloaded', timeout=60000)
+        
+        # Ждем загрузки страницы
         await self.human.random_delay(3, 5)
         
-        # Ищем поле ввода поиска - используем разные подходы
-        search_box = None
-        selectors = [
-            "input[role='searchbox']",
-            "input[aria-label*='Поиск']",
-            "input[placeholder*='Поиск']",
-            ".search-input input",
-            "input[data-testid='search-input']",
-            "header input",
-            "input[type='text']"
-        ]
-        
-        for selector in selectors:
-            try:
-                search_box = await page.wait_for_selector(selector, timeout=3000)
-                if search_box:
-                    print(f"Найдено поле поиска по селектору: {selector}")
-                    break
-            except:
-                continue
-        
-        if not search_box:
-            # Пробуем кликнуть по области поиска
-            try:
-                await page.click("header", timeout=5000)
-                await self.human.random_delay(1, 2)
-                search_box = await page.wait_for_selector("input", timeout=5000)
-            except:
-                pass
-        
-        if not search_box:
-            raise Exception("Не удалось найти поле поиска на странице Яндекс Карт")
-            
-        # Фокусируемся на поле и очищаем его
-        await search_box.focus()
-        await self.human.random_delay(0.5, 1)
-        
-        # Выделяем всё и удаляем (Ctrl+A, Delete)
-        await page.keyboard.press("Control+a")
-        await self.human.random_delay(0.3, 0.7)
-        await page.keyboard.press("Delete")
-        await self.human.random_delay(0.5, 1)
-        
-        # Вводим полный запрос: город + тип объекта
-        full_query = f"{query}"
-        print(f"Вводим запрос: '{full_query}' для города {city}")
-        
-        # Вводим посимвольно с задержками
-        for char in full_query:
-            await page.keyboard.type(char)
-            await self.human.random_delay(0.05, 0.2)
-        
-        await self.human.random_delay(1, 2)
-        
-        # Нажимаем Enter
-        await page.keyboard.press("Enter")
-        await self.human.random_delay(4, 7)
-        
-        # Ждем загрузки результатов - ищем разные индикаторы
+        # Ждем появления результатов поиска
         result_selectors = [
             ".business-list-view__list",
             "[data-business-list]",
