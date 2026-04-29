@@ -171,7 +171,8 @@ class YandexMapsParser:
             
     async def parse_city_query(self, city: str, query: str, max_items: int = 50) -> List[Dict]:
         """Полный цикл парсинга для города и запроса"""
-        async with self.context.new_page() as page:
+        page = await self.context.new_page()
+        try:
             await page.set_viewport_size({"width": 1920, "height": 1080})
             
             # Поиск
@@ -186,3 +187,5 @@ class YandexMapsParser:
                 item['search_query'] = query
                 
             return items
+        finally:
+            await page.close()
