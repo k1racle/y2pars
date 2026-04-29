@@ -160,18 +160,20 @@ class YandexMapsParser:
         """Основной метод парсинга для одного запроса в городе"""
         logger.info(f"Парсинг Яндекс Карт: {city} | Запрос: {query}")
         
-        async with self.context.new_page() as page:
-            try:
-                # 1. Поиск
-                await self.search(page, query, city)
-                
-                # 2. Парсинг
-                items = await self.parse_cards(page, max_items)
-                
-                return items
-                
-            except Exception as e:
-                logger.error(f"Критическая ошибка при парсинге {city} ({query}): {e}")
-                await page.screenshot(path=f"error_yandex_{city}_{query}.png")
-                logger.error(f"Скриншот ошибки сохранен: error_yandex_{city}_{query}.png")
-                return []
+        page = await self.context.new_page()
+        try:
+            # 1. Поиск
+            await self.search(page, query, city)
+            
+            # 2. Парсинг
+            items = await self.parse_cards(page, max_items)
+            
+            return items
+            
+        except Exception as e:
+            logger.error(f"Критическая ошибка при парсинге {city} ({query}): {e}")
+            await page.screenshot(path=f"error_yandex_{city}_{query}.png")
+            logger.error(f"Скриншот ошибки сохранен: error_yandex_{city}_{query}.png")
+            return []
+        finally:
+            await page.close()
