@@ -1,9 +1,9 @@
 """
-Парсер Яндекс Карт
+Парсер Яндекс Карт - исправленная версия
 """
 import asyncio
-import re
-from typing import List, Dict, Optional
+import logging
+from typing import List, Dict
 from playwright.async_api import Page, BrowserContext
 
 try:
@@ -11,328 +11,167 @@ try:
 except ImportError:
     from human_behavior import HumanBehaviorSimulator
 
+logger = logging.getLogger(__name__)
 
 class YandexMapsParser:
     """Парсер для Яндекс Карт"""
-    
+
     def __init__(self, context: BrowserContext, config: dict):
         self.context = context
         self.config = config
         self.human = HumanBehaviorSimulator(config)
         self.base_url = "https://yandex.ru/maps"
-        
+
     async def search(self, page: Page, query: str, city: str):
-        """Выполнение поиска по запросу и городу через прямой URL"""
-        city_slug = self.get_city_slug(city)
-        query_slug = query.lower().replace(' ', '-')
+        """Выполнение поиска через поле ввода на главной странице карт"""
+        logger.info(f"  [Поиск] Переход на главную страницу Яндекс Карт")
         
-        # Формируем прямой URL с результатами поиска
-        search_url = f"https://yandex.ru/maps/{city_slug}/search/{query_slug}"
-        
-        print(f"Переходим по URL: {search_url}")
-        await page.goto(search_url, wait_until='domcontentloaded', timeout=60000)
-        
-        # Ждем загрузки страницы
-        await self.human.random_delay(3, 5)
-        
-        # Ждем появления результатов поиска
-        result_selectors = [
-            ".business-list-view__list",
-            "[data-business-list]",
-            ".search-results",
-            ".organizations-list",
-            "article[data-business-id]"
-        ]
-        
-        for selector in result_selectors:
-            try:
-                await page.wait_for_selector(selector, timeout=10000)
-                print(f"Результаты найдены по селектору: {selector}")
-                break
-            except:
-                continue
-        
-        # Дополнительная пауза для полной загрузки
-        await self.human.random_delay(2, 4)
-    
-    def get_city_slug(self, city: str) -> str:
-        """Получение slug города для URL Яндекс Карт"""
-        city_slugs = {
-            'москва': 'moscow',
-            'санкт-петербург': 'saint-petersburg',
-            'спб': 'saint-petersburg',
-            'новосибирск': 'novosibirsk',
-            'екатеринбург': 'yekaterinburg',
-            'казань': 'kazan',
-            'нижний новгород': 'nizhny-novgorod',
-            'челябинск': 'chelyabinsk',
-            'самара': 'samara',
-            'омск': 'omsk',
-            'ростов-на-дону': 'rostov-na-donu',
-            'уфа': 'ufa',
-            'красноярск': 'krasnoyarsk',
-            'воронеж': 'voronezh',
-            'пермь': 'perm',
-            'волгоград': 'volgograd',
-            'краснодар': 'krasnodar',
-        }
-        return city_slugs.get(city.lower(), city.lower().replace(' ', '-'))
-            
-    async def scroll_and_collect(self, page: Page, max_items: int = 50) -> List[Dict]:
-        """Прокрутка списка и сбор данных об объектах"""
-        items = []
-        seen_ids = set()
-        
-        # Ждем немного больше для полной загрузки
-        await self.human.random_delay(2, 4)
-        
-        # Находим контейнер со списком - используем разные селекторы
-        list_container = None
-        container_selectors = [
-            ".business-list-view__list",
-            "[data-business-list]",
-            ".search-results",
-            ".organizations-list",
-            "div[role='list']"
-        ]
-        
-        for selector in container_selectors:
-            try:
-                list_container = await page.query_selector(selector)
-                if list_container:
-                    print(f"Контейнер списка найден: {selector}")
-                    break
-            except:
-                continue
-        
-        if not list_container:
-            # Если не нашли список, пробуем найти карточки напрямую
-            print("Список не найден, пробуем найти карточки напрямую")
-            await self.human.random_delay(1, 2)
-        
-        max_scrolls = 20
-        scrolls_done = 0
-        
-        while scrolls_done < max_scrolls and len(items) < max_items:
-            # Прокручиваем страницу или контейнер
-            if list_container:
-                await self.human.human_scroll(page, list_container)
-            else:
-                # Прокручиваем всю страницу
-                await self.human.human_scroll_page(page)
-            
-            # Собираем элементы - используем разные селекторы для карточек
-            card_selectors = [
-                ".business-card-view__content",
-                "article[data-business-id]",
-                "[data-business-card]",
-                ".search-snippet-view",
-                "div[role='listitem']",
-                ".business-list-item"
-            ]
-            
-            item_cards = []
-            for selector in card_selectors:
-                try:
-                    item_cards = await page.query_selector_all(selector)
-                    if item_cards:
-                        print(f"Найдено карточек по селектору {selector}: {len(item_cards)}")
-                        break
-                except:
-                    continue
-            
-            if not item_cards:
-                print("Карточки не найдены, ждем...")
-                await self.human.random_delay(2, 3)
-                scrolls_done += 1
-                continue
-            
-            for card in item_cards:
-                try:
-                    item_id = await card.get_attribute('data-business-id') or await card.get_attribute('id')
-                    if item_id and item_id in seen_ids:
-                        continue
-                    if item_id:
-                        seen_ids.add(item_id)
-                        
-                    data = await self.extract_item_data(page, card)
-                    if data and data.get('name'):
-                        items.append(data)
-                        
-                    if len(items) >= max_items:
-                        break
-                except Exception as e:
-                    continue
-                    
-            scrolls_done += 1
-            
-            # Проверяем, достигли ли конца списка
-            if list_container:
-                try:
-                    scroll_height = await list_container.evaluate('el => el.scrollHeight')
-                    client_height = await list_container.evaluate('el => el.clientHeight')
-                    scroll_top = await list_container.evaluate('el => el.scrollTop')
-                    
-                    if scroll_top + client_height >= scroll_height - 10:
-                        print("Достигнут конец списка")
-                        break
-                except:
-                    pass
-            
-            # Небольшая пауза между скроллами
-            await self.human.random_delay(1, 2)
-            
-        print(f"Всего собрано объектов: {len(items)}")
-        return items[:max_items]
-        
-    async def extract_item_data(self, page: Page, card) -> Optional[Dict]:
-        """Извлечение данных из карточки объекта"""
+        # Переходим на главную страницу карт
+        await page.goto("https://yandex.ru/maps", wait_until='domcontentloaded', timeout=60000)
+        await asyncio.sleep(3)  # Ждем прогрузки интерфейса
+
+        logger.info("  [Поиск] Поиск поля ввода...")
         try:
-            data = {
-                'source': 'yandex_maps',
-                'name': None,
-                'address': None,
-                'rating': None,
-                'reviews_count': None,
-                'phone': None,
-                'website': None,
-                'category': None,
-                'hours': None,
-                'url': None
-            }
+            # Ждем появления поля поиска
+            search_box = await page.wait_for_selector(
+                'input[data-testid="search-input"]', 
+                state='visible',
+                timeout=15000
+            )
+            logger.info("  [Поиск] Поле ввода найдено.")
             
-            # Название - ищем по разным селекторам
-            name_selectors = [
-                ".business-card-view__header-title",
-                ".search-snippet-view__title",
-                "[data-business-card-title]",
-                "a[data-gu]",
-                ".business-list-item__name"
-            ]
-            for selector in name_selectors:
-                try:
-                    name_el = await card.query_selector(selector)
-                    if name_el:
-                        data['name'] = (await name_el.inner_text()).strip()
-                        break
-                except:
-                    continue
+            # Очищаем поле
+            await search_box.fill("")
+            await asyncio.sleep(0.5)
             
-            # Если название не найдено, пробуем найти его в тексте карточки
-            if not data['name']:
-                try:
-                    data['name'] = (await card.inner_text()).split('\n')[0].strip()[:100]
-                except:
-                    pass
+            # Вводим город и запрос
+            search_text = f"{city} {query}"
+            logger.info(f"  [Поиск] Ввод запроса: '{search_text}'")
+            await self.human.type_text(page, 'input[data-testid="search-input"]', search_text)
             
-            # Рейтинг - ищем по разным селекторам
-            rating_selectors = [
-                ".business-card-view__rating",
-                ".rating-value",
-                "[class*='rating']",
-                ".search-snippet-view__rating"
-            ]
-            for selector in rating_selectors:
-                try:
-                    rating_el = await card.query_selector(selector)
-                    if rating_el:
-                        rating_text = await rating_el.inner_text()
-                        rating_match = re.search(r'([\d,]+)', rating_text.replace(',', '.'))
-                        if rating_match:
-                            data['rating'] = float(rating_match.group(1).replace(',', '.'))
-                            break
-                except:
-                    continue
-                    
-            # Количество отзывов
-            reviews_selectors = [
-                ".business-card-view__reviews-count",
-                "[class*='review']",
-                ".search-snippet-view__reviews"
-            ]
-            for selector in reviews_selectors:
-                try:
-                    reviews_el = await card.query_selector(selector)
-                    if reviews_el:
-                        reviews_text = await reviews_el.inner_text()
-                        reviews_match = re.search(r'(\d+)', reviews_text.replace(' ', ''))
-                        if reviews_match:
-                            data['reviews_count'] = int(reviews_match.group(1))
-                            break
-                except:
-                    continue
-                    
-            # Адрес
-            address_selectors = [
-                ".business-card-view__address",
-                ".search-snippet-view__address",
-                "[class*='address']"
-            ]
-            for selector in address_selectors:
-                try:
-                    address_el = await card.query_selector(selector)
-                    if address_el:
-                        data['address'] = (await address_el.inner_text()).strip()
-                        break
-                except:
-                    continue
-                
-            # Категория
-            category_selectors = [
-                ".business-card-view__subtitle",
-                ".search-snippet-view__subtitle",
-                "[class*='category']"
-            ]
-            for selector in category_selectors:
-                try:
-                    category_el = await card.query_selector(selector)
-                    if category_el:
-                        data['category'] = (await category_el.inner_text()).strip()
-                        break
-                except:
-                    continue
-                
-            # Ссылка на объект
-            link_selectors = [
-                "a.business-card-view__link",
-                "a.search-snippet-view__link",
-                "a[data-gu]",
-                "a[href*='/maps/']"
-            ]
-            for selector in link_selectors:
-                try:
-                    link_el = await card.query_selector(selector)
-                    if link_el:
-                        href = await link_el.get_attribute('href')
-                        if href:
-                            data['url'] = href if href.startswith('http') else f"https://yandex.ru{href}"
-                            break
-                except:
-                    continue
-                
-            return data
+            # Нажимаем Enter
+            await search_box.press("Enter")
+            logger.info("  [Поиск] Запрос отправлен (Enter).")
+            
+            # Ждем появления результатов
+            await asyncio.sleep(5) 
             
         except Exception as e:
-            print(f"Ошибка при извлечении данных: {e}")
-            return None
+            logger.error(f"  [Ошибка] Не удалось найти поле поиска или ввести текст: {e}")
+            # Пробуем альтернативный селектор
+            try:
+                alt_box = await page.wait_for_selector('input[class*="search-input"]', timeout=5000)
+                await alt_box.fill(f"{city} {query}")
+                await alt_box.press("Enter")
+                await asyncio.sleep(5)
+            except:
+                raise Exception("Не удалось взаимодействовать с поиском Яндекса")
+
+    async def parse_cards(self, page: Page, max_items: int) -> List[Dict]:
+        """Собирает данные из списка организаций"""
+        items = []
+        logger.info("  [Парсинг] Начинаем сбор данных из списка...")
+
+        # Селекторы для элементов списка
+        list_item_selector = 'div[class*="business-list-view__list-item"]'
+        
+        scroll_pause = 1.5
+        no_progress_count = 0
+        
+        while len(items) < max_items and no_progress_count < 3:
+            # Находим все видимые карточки в списке
+            cards = await page.query_selector_all(list_item_selector)
             
-    async def parse_city_query(self, city: str, query: str, max_items: int = 50) -> List[Dict]:
-        """Полный цикл парсинга для города и запроса"""
-        page = await self.context.new_page()
-        try:
-            await page.set_viewport_size({"width": 1920, "height": 1080})
-            
-            # Поиск
-            await self.search(page, query, city)
-            
-            # Сбор данных
-            items = await self.scroll_and_collect(page, max_items)
-            
-            # Добавляем информацию о поиске
-            for item in items:
-                item['city'] = city
-                item['search_query'] = query
+            if not cards:
+                logger.warning("  [Парсинг] Карточки не найдены. Пробуем альтернативные селекторы...")
+                cards = await page.query_selector_all('a[class*="business-card-link"]')
+                if not cards:
+                    break
+
+            logger.debug(f"  [Парсинг] Найдено элементов в списке: {len(cards)}. Всего собрано: {len(items)}")
+
+            for card in cards:
+                if len(items) >= max_items:
+                    break
                 
-            return items
-        finally:
-            await page.close()
+                text_content = await card.inner_text()
+                if len(text_content.strip()) < 5:
+                    continue
+
+                try:
+                    # Название
+                    name_el = await card.query_selector('span[class*="business-card-header__title"]')
+                    name = await name_el.inner_text() if name_el else "Без названия"
+
+                    # Адрес
+                    addr_el = await card.query_selector('span[class*="business-card-address"]')
+                    address = await addr_el.inner_text() if addr_el else ""
+
+                    # Рейтинг
+                    rating_el = await card.query_selector('span[class*="business-rating__value"]')
+                    rating = await rating_el.inner_text() if rating_el else ""
+
+                    # Ссылка
+                    link_el = await card.query_selector('a[class*="business-card-link"]')
+                    link = await link_el.get_attribute('href') if link_el else ""
+                    if link and link.startswith('/'):
+                        link = f"https://yandex.ru{link}"
+
+                    item = {
+                        'source': 'Yandex Maps',
+                        'name': name,
+                        'address': address,
+                        'rating': rating,
+                        'url': link,
+                    }
+                    
+                    # Проверка на дубликаты
+                    is_duplicate = any(
+                        i['name'] == name and i['address'] == address 
+                        for i in items
+                    )
+                    
+                    if not is_duplicate:
+                        items.append(item)
+                        logger.debug(f"    + Добавлено: {name}")
+                
+                except Exception as e:
+                    logger.error(f"  [Ошибка] При парсинге карточки: {e}")
+                    continue
+
+            if len(items) >= max_items:
+                break
+
+            # Скроллим вниз список
+            logger.debug("  [Скролл] Прокручиваем список организаций...")
+            list_container = await page.query_selector('div[class*="scrollable-pane"]')
+            if list_container:
+                await self.human.scroll_element(page, list_container, direction='down', amount=400)
+            else:
+                await self.human.scroll_page(page, direction='down', pixels=400)
+
+            await asyncio.sleep(scroll_pause)
+            no_progress_count += 1
+            
+        logger.info(f"  [Итого] Собрано объектов: {len(items)}")
+        return items
+
+    async def parse_city_query(self, city: str, query: str, max_items: int = 50) -> List[Dict]:
+        """Основной метод парсинга для одного запроса в городе"""
+        logger.info(f"Парсинг Яндекс Карт: {city} | Запрос: {query}")
+        
+        async with self.context.new_page() as page:
+            try:
+                # 1. Поиск
+                await self.search(page, query, city)
+                
+                # 2. Парсинг
+                items = await self.parse_cards(page, max_items)
+                
+                return items
+                
+            except Exception as e:
+                logger.error(f"Критическая ошибка при парсинге {city} ({query}): {e}")
+                await page.screenshot(path=f"error_yandex_{city}_{query}.png")
+                logger.error(f"Скриншот ошибки сохранен: error_yandex_{city}_{query}.png")
+                return []
