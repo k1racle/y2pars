@@ -27,7 +27,7 @@ class Gis2Parser:
         city_slug = self._get_city_slug(city)
         url = f"{self.base_url}/{city_slug}"
         
-        await page.goto(url, wait_until='networkidle')
+        await page.goto(url, wait_until='domcontentloaded', timeout=60000)
         await self.human.random_delay(2, 4)
         
         # Ищем поле ввода поиска
