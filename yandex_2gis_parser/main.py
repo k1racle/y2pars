@@ -8,10 +8,16 @@ from datetime import datetime
 from typing import List, Dict
 from playwright.async_api import async_playwright, BrowserContext
 
-from .yandex_parser import YandexMapsParser
-from .gis2_parser import Gis2Parser
-from .excel_exporter import ExcelExporter
-from .human_behavior import HumanBehaviorSimulator
+try:
+    from .yandex_parser import YandexMapsParser
+    from .gis2_parser import Gis2Parser
+    from .excel_exporter import ExcelExporter
+    from .human_behavior import HumanBehaviorSimulator
+except ImportError:
+    from yandex_parser import YandexMapsParser
+    from gis2_parser import Gis2Parser
+    from excel_exporter import ExcelExporter
+    from human_behavior import HumanBehaviorSimulator
 
 
 # Настройка логирования

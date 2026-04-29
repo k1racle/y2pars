@@ -5,7 +5,11 @@ import asyncio
 import re
 from typing import List, Dict, Optional
 from playwright.async_api import Page, BrowserContext
-from .human_behavior import HumanBehaviorSimulator
+
+try:
+    from .human_behavior import HumanBehaviorSimulator
+except ImportError:
+    from human_behavior import HumanBehaviorSimulator
 
 
 class Gis2Parser:
