@@ -119,6 +119,37 @@ class HumanBehaviorSimulator:
             await element.click()
             await self.random_delay(0.5, 1.5)
             
+    async def human_scroll_page(self, page: Page):
+        """Имитация человеческой прокрутки всей страницы"""
+        if not self.scroll_enabled:
+            return
+            
+        scroll_height = await page.evaluate('() => document.documentElement.scrollHeight')
+        client_height = await page.evaluate('() => document.documentElement.clientHeight')
+        
+        max_scroll = scroll_height - client_height
+        if max_scroll <= 0:
+            return
+            
+        current_scroll = await page.evaluate('() => window.scrollY')
+        
+        # Случайный размер шага прокрутки
+        scroll_step = random.randint(200, 500)
+        new_scroll = min(current_scroll + scroll_step, max_scroll)
+        
+        await page.evaluate(f'window.scrollTo({{top: {new_scroll}, behavior: "smooth"}})')
+        
+        # Пауза между скроллами
+        pause = random.uniform(1.5, 3.5)
+        await asyncio.sleep(pause)
+        
+        # Иногда делаем небольшую прокрутку назад (как люди)
+        if random.random() < 0.2 and new_scroll > 50:
+            back_step = random.randint(30, 100)
+            new_scroll = max(0, new_scroll - back_step)
+            await page.evaluate(f'window.scrollTo({{top: {new_scroll}, behavior: "smooth"}})')
+            await asyncio.sleep(random.uniform(0.5, 1.5))
+            
     async def human_type(self, page: Page, selector: str, text: str):
         """Человеческий ввод текста с случайными задержками"""
         await page.click(selector)
