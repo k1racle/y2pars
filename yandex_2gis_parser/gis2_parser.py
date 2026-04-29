@@ -7,9 +7,9 @@ from typing import List, Dict, Optional
 from playwright.async_api import Page, BrowserContext
 
 try:
-    from .human_behavior import HumanBehaviorSimulator
+    from .human_behavior import HumanBehavior
 except ImportError:
-    from human_behavior import HumanBehaviorSimulator
+    from human_behavior import HumanBehavior
 
 
 class Gis2Parser:
@@ -18,7 +18,7 @@ class Gis2Parser:
     def __init__(self, context: BrowserContext, config: dict):
         self.context = context
         self.config = config
-        self.human = HumanBehaviorSimulator(config)
+        self.human = HumanBehavior(config)
         self.base_url = "https://2gis.ru"
         
     async def search(self, page: Page, query: str, city: str):

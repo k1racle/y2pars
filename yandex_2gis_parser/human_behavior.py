@@ -9,7 +9,19 @@ from playwright.async_api import Page
 class HumanBehaviorSimulator:
     """Класс для симуляции человеческого поведения при парсинге"""
     
-    def __init__(self, config: dict):
+    def __init__(self, config: dict = None):
+        # Если конфиг не передан, используем значения по умолчанию
+        if config is None:
+            config = {
+                'parsing_settings': {
+                    'mouse_movement_enabled': True,
+                    'random_scroll_enabled': True,
+                    'delay_between_actions_min': 2,
+                    'delay_between_actions_max': 5,
+                    'scroll_pause_min': 1,
+                    'scroll_pause_max': 3
+                }
+            }
         self.config = config
         self.mouse_enabled = config.get('parsing_settings', {}).get('mouse_movement_enabled', True)
         self.scroll_enabled = config.get('parsing_settings', {}).get('random_scroll_enabled', True)
@@ -151,7 +163,7 @@ class HumanBehaviorSimulator:
             await asyncio.sleep(random.uniform(0.5, 1.5))
             
     async def human_type(self, page: Page, selector: str, text: str):
-        """Человеческий ввод текста с случайными задержками"""
+        """Человеческий ввод текста с случайными задержками (принимает селектор)"""
         await page.click(selector)
         await asyncio.sleep(random.uniform(0.3, 0.7))
         
@@ -169,3 +181,53 @@ class HumanBehaviorSimulator:
                 await asyncio.sleep(random.uniform(0.05, 0.15))
                 
         await self.random_delay(0.5, 1.0)
+
+    async def human_type_element(self, element, text: str):
+        """Человеческий ввод текста в элемент (принимает объект элемента)"""
+        await element.click()
+        await asyncio.sleep(random.uniform(0.3, 0.7))
+        
+        # Очищаем поле через элемент
+        await element.fill("")
+        await asyncio.sleep(random.uniform(0.2, 0.5))
+        
+        # Вводим текст посимвольно с случайными задержками
+        for char in text:
+            await element.press(f"Key:{char}" if len(char) == 1 and char.isalpha() else char)
+            # Случайная задержка между символами (люди печатают неравномерно)
+            if random.random() < 0.1:  # 10% шанс на большую паузу
+                await asyncio.sleep(random.uniform(0.3, 0.8))
+            else:
+                await asyncio.sleep(random.uniform(0.05, 0.15))
+                
+        await self.random_delay(0.5, 1.0)
+
+
+# Алиас для обратной совместимости
+HumanBehavior = HumanBehaviorSimulator
+
+
+# Методы-обертки для удобства вызова (как в старых версиях)
+async def type_text(page, selector: str, text: str):
+    """Обертка для human_type"""
+    simulator = HumanBehaviorSimulator()
+    await simulator.human_type(page, selector, text)
+
+
+async def scroll_element(page, element, direction: str = 'down', amount: int = 400):
+    """Обертка для скролла элемента"""
+    # Простая реализация скролла элемента
+    if direction == 'down':
+        await element.evaluate(f'el => el.scrollTop += {amount}')
+    elif direction == 'up':
+        await element.evaluate(f'el => el.scrollTop -= {amount}')
+    await asyncio.sleep(0.5)
+
+
+async def scroll_page(page, direction: str = 'down', pixels: int = 400):
+    """Обертка для скролла страницы"""
+    if direction == 'down':
+        await page.evaluate(f'window.scrollBy(0, {pixels})')
+    elif direction == 'up':
+        await page.evaluate(f'window.scrollBy(0, -{pixels})')
+    await asyncio.sleep(0.5)
